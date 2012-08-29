@@ -1,0 +1,24 @@
+This is an use-level thread lib.
+It's something more like the concept of coroutine which I called task in the code.
+tasks works in a cooperate way. A task will keep running until:
+1.it calls task_yield to give up CPU
+2.it's blocked by channel or I/O
+
+FEATURES:
+* unlimited main task's stack size
+  main task use the system stack while other task's stack are malloced
+* channel
+  channel is an important concept from google's Go language.
+  Do not communicate by sharing memory; instead, share memory by communicating.
+* nonblock I/O
+  As we all knows, if one use-level thread call the block system call, the whole process block.
+  But in this implement, the lib provide the nonblock I/O. If one task blocks, the lib switch
+  to other tasks automally rather than hang the whole proces.
+
+NOTE:
+During the implemention I get great influence by two source code:
+libtask   -- http://swtch.com/libtask/
+coroutine -- https://github.com/cloudwu/coroutine/ 
+
+LICENSE:
+GPL license
