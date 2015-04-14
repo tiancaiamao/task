@@ -1,7 +1,7 @@
 This is an use-level thread lib.
 It's something more like the concept of coroutine which I called task in the code.
 tasks works in a cooperate way. A task will keep running until:
-1.it calls task_yield to give up CPU
+1.it calls TaskYield to give up CPU
 2.it's blocked by channel or I/O
 
 FEATURES:

@@ -18,9 +18,9 @@ static void fdtask(void *arg) {
 	int nready;
 	int i;
 
-	task_daemon();
+	TaskDaemon();
 	while(1) {
-		while(task_yield() != 0);	//the return value means whether the task been hand off, 0 means not
+		while(TaskYield() != 0);	//the return value means whether the task been hand off, 0 means not
 
 		nready = poll(fdarray,nfds,-1);
 	        if(nready < 0) {
@@ -52,7 +52,7 @@ static void fdwait(int fd,int rw) {
 	int bits;
 	if(init == 0) {
 		init = 1;
-		task_create(fdtask,0,4096);
+		TaskCreate(fdtask,0);
 	}
 	if(nfds >= MAXFD) {
 		fprintf(stderr,"too many poll fds");
@@ -72,9 +72,9 @@ static void fdwait(int fd,int rw) {
 	fdarray[nfds].events = bits;
 	fdarray[nfds].revents = 0;
 	nfds++;
-	//don't put it in ready queue because it's blocked by I/O. so we call swapcontext directlly
+	//don't put it in ready queue because it's blocked by I/O. so we call SwapContext directlly
 	running->status = BLOCKED;
-	swapcontext(&running->context,&schedule_context);
+	SwapContext(&running->context,&schedule_context);
 }
 
 int fdread(int fd,void *buf,int n) {

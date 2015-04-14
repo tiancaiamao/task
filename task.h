@@ -11,18 +11,35 @@ extern "C"
 	struct channel;
 
 	//int		anyready(void);
-	int	task_create(void (*f)(void *arg), void *arg,int stacksize);
-	void	task_exit(int);
-	void	task_exitall(int);
-	void	task_main(int argc, char *argv[]);
-	int	task_yield(void);
-	void	task_exit(int val);
-	void	task_daemon();
+	int	TaskCreate(void (*f)(void *arg), void *arg);
+	void TaskExit(int);
+	void TaskExitAll(int);
+	void TaskMain(void*);
+	int	TaskYield(void);
+	void TaskExit(int val);
+	void TaskDaemon();
 	//void		tasksystem(void);
 	//unsigned int	taskdelay(unsigned int);
 	//unsigned int	taskid(void);
 
+	enum
+	{
+		CHANEND,
+		CHANSND,
+		CHANRCV,
+	};
+
+	struct alt {
+		struct channel *c;
+		void		*v;
+		int		op;
+	};
+	
 	struct channel*	chan_create(int elemsize, int elemcnt);
+	int	chan_send(struct channel *c,void *v);
+	int	chan_recv(struct channel *c,void *v);
+	int chan_select(struct alt *arr);
+	void chan_close(struct channel *c, void *v);
 	void	chan_free(struct channel *c);
 	//int	chan_nbrecv(struct channel *c, void *v);
 	//void*	chan_nbrecvp(struct channel *c);
@@ -30,10 +47,8 @@ extern "C"
 	//int	chan_nbsend(struct channel *c, void *v);
 	//int	chan_nbsendp(struct channel *c, void *v);
 	//int	chan_nbsendul(struct channel *c, unsigned long v);
-	int	chan_recv(struct channel *c,void *v);
 	//void*	chan_recvp(struct channel *c);
 	//unsigned long	chan_recvul(struct channel *c);
-	int	chan_send(struct channel *c,void *v);
 	//int	chan_sendp(struct channel *c, void *v);
 	//int	chan_sendul(struct channel *c, unsigned long v);
 

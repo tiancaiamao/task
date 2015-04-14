@@ -1,5 +1,5 @@
 all:libtask.a
-libtask.a:task.o channel.o fd.o
+libtask.a:task.o channel.o fd.o context.o
 	ar -r $@ $^
 task.o:task.c impl.h task.h
 	gcc -g -c $< -o $@
@@ -7,7 +7,9 @@ channel.o:channel.c impl.h task.h
 	gcc -g -c $< -o $@
 fd.o:fd.c task.h impl.h
 	gcc -g -c $< -o $@
-task:unit_test.c task.o
+context.o:context.s
+	gcc -c $< -o $@
+task:unit_test.c task.o context.o
 	gcc -D_TASK_TEST -g $^ -o $@
 channel:unit_test.c task.o channel.o
 	gcc -D_CHAN_TEST -g $^ -o $@

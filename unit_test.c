@@ -1,16 +1,21 @@
 #include <stdio.h>
 
 #ifdef _TASK_TEST
+#include <stdio.h>
 #include "task.h"
-void hello(void *arg) {
-	int stack;
-	printf("hello world %d!\n",stack);
+
+void P(void *argv) {
+    int i;
+	
+    for (i = 0; i < 10; i++) {
+        printf("%d", i);
+        TaskYield();
+    }
 }
-int main() {
-	task_init();
-	task_create(hello,NULL,31242);
-	task_yield();
-	task_exit(0);
+
+void TaskMain(void *argv) {
+    TaskCreate(P, argv);
+    P(argv);
 }
 #endif
 
@@ -29,11 +34,11 @@ int main() {
 
 	task_init();
 	c = chan_create(sizeof(int),1);
-	task_create(hello,c,4096);
+	TaskCreate(hello,c,4096);
 	chan_recv(c,&p);
 	printf("received val: %d\n",p);
 	chan_free(c);
-	task_exit(0);
+	TaskExit(0);
 }
 #endif
 
@@ -46,9 +51,9 @@ int main() {
 	char buf[55555];
 
 	task_init();
-	task_create(hello,NULL,1024);
+	TaskCreate(hello,NULL,1024);
 	fdnoblock(0);
 	fdread(0,buf,55555);
-	task_exit(0);
+	TaskExit(0);
 }
 #endif

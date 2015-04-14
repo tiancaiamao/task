@@ -58,7 +58,7 @@ void*	chan_recvp(struct channel *c) {
 	while(c->p == NULL) {
 		taskarray_add(&c->receiver,running);
 		running->status = BLOCKED;
-		swapcontext(&running->context,&schedule_context);
+		SwapContext(&running->context,&schedule_context);
 	}
 	ret = c->p;
 	c->p = NULL;
@@ -77,7 +77,7 @@ int chan_recv(struct channel *c,void *v) {
 		taskarray_add(&c->receiver,running);	
 		running->status = BLOCKED;
 		running->p = v;
-		swapcontext(&running->context,&schedule_context);
+		SwapContext(&running->context,&schedule_context);
 		return 1;
 	} else {
 		memcpy(v,c->buf+c->head*c->elemsize,c->elemsize);
@@ -102,7 +102,7 @@ int chan_sendp(struct channel *c,void *v) {
 	while(c->p != NULL) {
 		taskarray_add(&c->sender,running);
 		running->status = BLOCKED;
-		swapcontext(&running->context,&schedule_context);
+		SwapContext(&running->context,&schedule_context);
 	}
 	c->p = v;
 	if(c->receiver.use != 0) {
@@ -119,7 +119,7 @@ int chan_send(struct channel *c, void *v) {
 		taskarray_add(&c->sender,running);
 		running->status = BLOCKED;
 		running->p = v;
-		swapcontext(&running->context,&schedule_context);
+		SwapContext(&running->context,&schedule_context);
 		return 1;
 	} else {
 		tail = &c->buf[((c->head+c->use)%c->elemnum) * c->elemsize];

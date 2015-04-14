@@ -3,8 +3,8 @@
  */
 #ifndef _IMPL_H
 
-#include <ucontext.h>
-#define DEFAULT_STACKSIZE 1024
+#include "context.h"
+#define DEFAULT_STACKSIZE 2048
 
 enum TASK_STATUS {
 	RUNNING,
@@ -13,17 +13,18 @@ enum TASK_STATUS {
 	EXITING,
 	TASK_STATUS_MAX
 };
+
 struct task {
 	struct task *next;	//linked ready tasks
-	uint tid;
-	uint stksize;
+	int tid;
+	int stksize;
 	void (*fn)(void *arg);
 	void *arg;
-	ucontext_t context;
+	struct Context context;
 	void *p;	//for some data exchange between task and channel
 	char status;
 	char daemon;
-	char stk[0];
+	char *stk;
 };
 
 struct taskarray {
@@ -42,9 +43,9 @@ struct channel {
 	void *p;
 	char buf[0];
 };
-extern ucontext_t schedule_context;
+
+extern struct Context schedule_context;
 extern struct task *running;
 void task_ready(struct task *t);
-void task_main(int argc,char *argv[]);
 
 #endif
