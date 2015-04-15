@@ -11,9 +11,11 @@ context.o:context.s
 	gcc -c $< -o $@
 task:unit_test.c task.o context.o
 	gcc -D_TASK_TEST -g $^ -o $@
+stack:unit_test.c task.o context.o
+		gcc -D_STACK_TEST -g $^ -o $@
 channel:unit_test.c task.o channel.o
 	gcc -D_CHAN_TEST -g $^ -o $@
 fd:unit_test.c task.o fd.o
 	gcc -D_FD_TEST -g $^ -o $@
 clean:
-	rm -f libtask.a *.o task channel fd
+	rm -f libtask.a *.o task channel fd stack

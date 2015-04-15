@@ -1,8 +1,8 @@
 #include <stdio.h>
-
-#ifdef _TASK_TEST
 #include <stdio.h>
 #include "task.h"
+
+#ifdef _TASK_TEST
 
 void P(void *ptr) {
     int id = *(int *)ptr;
@@ -57,4 +57,26 @@ int main() {
     fdread(0, buf, 55555);
     TaskExit(0);
 }
+#endif
+
+#ifdef _STACK_TEST
+
+void P(int i) {
+    const int pagesize = 4 << 10;
+    char fillstack[200];
+
+    // if remove this line, stack will overflow
+    TaskStackCheck();
+    if (i * 200 > 3 * pagesize) {
+        printf("i = %d, success!\n", i);
+        return;
+    }
+    P(i + 1);
+}
+
+void TaskMain(void *argv) {
+    P(0);
+    return;
+}
+
 #endif

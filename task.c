@@ -2,8 +2,12 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <string.h>
+#include <assert.h>
+#include <stdint.h>
 #include "impl.h"
 #include "task.h"
+
+const int STACK_PRESERVE = 512;
 
 static const char *status_string[] = {"running", "ready", "blocked", "exiting"};
 static const char *task_status(struct task *t);
@@ -154,6 +158,43 @@ static const char *task_status(struct task *t) {
     return status_string[t->status];
 }
 
+static void checkStack(struct task *t) {
+    char *stk, *old;
+    int stksize;
+    const int pagesize = (4 << 10);
+    uint64_t needcopy;
+    uint64_t nrsp;
+
+    if (t->stksize < pagesize) {
+        stksize = pagesize;
+    } else {
+        stksize = t->stksize + pagesize;
+    }
+
+    stk = malloc(stksize);
+    if (stk == NULL) {
+        goto OOM;
+    }
+
+    old = t->stk;
+
+    needcopy = (uint64_t)(t->stk + t->stksize - t->context.rsp);
+    nrsp = (uint64_t)(stk + stksize - needcopy);
+    memcpy((void *)nrsp, (void *)t->context.rsp, needcopy);
+
+    t->context.rsp = nrsp;
+    t->context.rbp = stk + stksize - (old + t->stksize - t->context.rbp);
+    free(t->stk);
+    t->stk = stk;
+    t->stksize = stksize;
+
+    return;
+
+OOM:
+    fprintf(stderr, "out of memory!");
+    exit(-1);
+}
+
 // the reverse process of init.
 // tackle with resource release, also delete dead lock!
 void TaskExitAll(int val) {
@@ -173,14 +214,15 @@ static void schedule() {
             fprintf(stderr, "no task to run now exit\n");
             TaskExitAll(-1);
         }
+        checkStack(rt);
 
         running = rt;
         running->status = RUNNING;
 
         SwapContext(&schedule_context, &rt->context);
 
-        // RUNNING is not permited,maybe an error happened!  only three possible
-        // status here:
+        // RUNNING is not permited,maybe an error happened!
+        // only three possible  status here:
         // READY means the running called TaskYield
         // BLOCKED means task blocked by channel or I/O
         // EXITING means task finished and it's resources need to be collected
@@ -260,7 +302,8 @@ OOM:
     exit(-1);
 }
 
-int TaskYield(void) {
+int TaskYield() {
+    // don't do unnecessory operation
     if (ready.head == NULL) {
         return 0;
     }
@@ -268,6 +311,19 @@ int TaskYield(void) {
     task_ready(running);
     SwapContext(&running->context, &schedule_context);
     return 1;
+}
+
+// check for stack overflow
+// realloc stack for task when necessery
+void TaskStackCheck() {
+    char *rsp = (char *)&rsp;
+
+    // if that happened, the program should panic already
+    assert(rsp > running->stk);
+    if (rsp - running->stk < STACK_PRESERVE) {
+        task_ready(running);
+        SwapContext(&running->context, &schedule_context);
+    }
 }
 
 int main(int argc, char *argv[]) {
