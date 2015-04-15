@@ -156,7 +156,7 @@ static const char *task_status(struct task *t) {
 
 // the reverse process of init.
 // tackle with resource release, also delete dead lock!
-void TaskExit(int val) {
+void TaskExitAll(int val) {
     taskmap_exit(&tm);
     exit(val);
 }
@@ -171,7 +171,7 @@ static void schedule() {
         rt = _queue_pop(&ready);
         if (rt == NULL) {
             fprintf(stderr, "no task to run now exit\n");
-            TaskExit(-1);
+            TaskExitAll(-1);
         }
 
         running = rt;
@@ -194,7 +194,7 @@ static void schedule() {
 
 // NOTE: delay the release of memory here,because this function is run in the
 // task's stack!
-static void _TaskExit() {
+void TaskExit() {
     running->status = EXITING;
     taskmap_release(&tm, running->tid);
     SwapContext(&running->context, &schedule_context);
@@ -206,7 +206,7 @@ static void task_helper(void *ptr) {
     rt = *((struct task **)&ptr + 2);
     (rt->fn)(rt->arg);
 
-    _TaskExit();
+    TaskExit();
 }
 
 static void init() {

@@ -12,12 +12,11 @@ extern "C"
 
 	//int		anyready(void);
 	int	TaskCreate(void (*f)(void *arg), void *arg);
-	void TaskExit(int);
+	void TaskExit();
 	void TaskExitAll(int);
 	void TaskMain(void*);
 	int	TaskYield(void);
-	void TaskExit(int val);
-	void TaskDaemon();
+	void TaskDaemon(void);
 	//void		tasksystem(void);
 	//unsigned int	taskdelay(unsigned int);
 	//unsigned int	taskid(void);
