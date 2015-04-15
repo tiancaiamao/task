@@ -15,8 +15,41 @@ struct list {
 };
 static struct list *free_slot;
 
-static struct task *ready_head;
-static struct task *ready_tail;
+struct queue {
+    struct task *head;
+    struct task *tail;
+};
+
+static void _queue_push(struct queue *q, struct task *t) {
+    if (q->head == NULL) {
+        q->head = t;
+        q->tail = t;
+    } else {
+        q->tail->next = t;
+        q->tail = t;
+    }
+}
+
+static struct task *_queue_pop(struct queue *q) {
+    struct task *ret;
+
+    if (q->head == NULL) {
+        return NULL;
+    }
+
+    ret = q->head;
+    ret->next = NULL;
+    q->head = q->head->next;
+    if (q->head == NULL) {
+        q->tail = NULL;
+    }
+
+    return ret;
+}
+
+static struct queue ready;
+// static struct task *ready_head;
+// static struct task *ready_tail;
 struct task *running;
 struct Context schedule_context;
 
@@ -67,15 +100,14 @@ static void schedule() {
 
     fprintf(stderr, "run here in schedule the first time\n");
     while (1) {
-        rt = ready_head;
+        rt = _queue_pop(&ready);
         if (rt == NULL) {
-            printf("no task to run now exit\n");
+            fprintf(stderr, "no task to run now exit\n");
             TaskExit(-1);
         }
-        running = ready_head;
-        ready_head = ready_head->next;
+
+        running = rt;
         running->status = RUNNING;
-		running->next = NULL;
 
         SwapContext(&schedule_context, &rt->context);
 
@@ -126,20 +158,15 @@ static void init() {
     slot_init_range((struct list *)all, 0, 64);
     free_slot = (struct list *)all;
     allsize = 64;
-    ready_tail = NULL;
-    ready_head = NULL;
+
+    ready.tail = NULL;
+    ready.head = NULL;
     running = NULL;
 }
 
 void task_ready(struct task *t) {
-    if (ready_head == NULL) {
-        ready_head = t;
-        ready_tail = t;
-    } else {
-        ready_tail->next = t;
-        ready_tail = t;
-    }
     t->status = READY;
+    _queue_push(&ready, t);
 }
 
 int TaskCreate(void (*f)(void *), void *arg) {
@@ -195,11 +222,13 @@ int TaskCreate(void (*f)(void *), void *arg) {
 }
 
 int TaskYield(void) {
-    int ret = (ready_head != NULL);
+    if (ready.head == NULL) {
+        return 0;
+    }
 
     task_ready(running);
     SwapContext(&running->context, &schedule_context);
-    return ret;
+    return 1;
 }
 
 int main(int argc, char *argv[]) {
