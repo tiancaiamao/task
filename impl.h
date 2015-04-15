@@ -46,6 +46,6 @@ struct channel {
 
 extern struct Context schedule_context;
 extern struct task *running;
-void task_ready(struct task *t);
+extern void task_ready(struct task *t);
 
 #endif

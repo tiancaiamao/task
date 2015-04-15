@@ -26,6 +26,7 @@ static const char *task_status(struct task *t) {
     }
     return status_string[t->status];
 }
+
 // the reverse process of init. tackle with resource release, also delete dead
 // lock!
 void TaskExit(int val) {
@@ -60,7 +61,7 @@ void TaskExit(int val) {
     exit(val);
 }
 void TaskDaemon() { running->daemon = 1; }
-static void task_helper(uint tid);
+
 static void schedule() {
     struct task *rt;
 
@@ -68,12 +69,13 @@ static void schedule() {
     while (1) {
         rt = ready_head;
         if (rt == NULL) {
-            //			printf("no task to run now exit");
+            printf("no task to run now exit\n");
             TaskExit(-1);
         }
         running = ready_head;
         ready_head = ready_head->next;
         running->status = RUNNING;
+		running->next = NULL;
 
         SwapContext(&schedule_context, &rt->context);
 
@@ -88,6 +90,7 @@ static void schedule() {
         }
     }
 }
+
 // NOTE: delay the release of memory here,because this function is run in the
 // task's stack!
 static void _TaskExit() {
@@ -97,11 +100,14 @@ static void _TaskExit() {
     p = (struct list *)&all[running->tid];
     p->next = free_slot;
     free_slot = p;
+
+    SwapContext(&running->context, &schedule_context);
 }
-static void task_helper(uint tid) {
+
+static void task_helper(void *ptr) {
     struct task *rt;
 
-    rt = all[tid];
+    rt = *((struct task **)&ptr + 2);
     (rt->fn)(rt->arg);
 
     _TaskExit();
@@ -124,35 +130,7 @@ static void init() {
     ready_head = NULL;
     running = NULL;
 }
-/*
- * this function do two things:
- * 1.create the scheduler which have it's own stack and context,but the
- * scheduler is not a task
- * 2.obtain the main's task struct by calling SwapContext
- * */
-int task_init() {
-    char *stack;
-    int main;
 
-    init();
-    schedule_stack = malloc(DEFAULT_STACKSIZE);
-    if (schedule_stack == NULL) {
-        fprintf(stderr, "out of memory in task_init\n");
-        return -1;
-    }
-    // if (getcontext(&schedule_context) < 0) {
-    // perror("getcontext error in task_init:");
-    // return -1;
-    // }
-    // schedule_context.uc_stack.ss_sp = schedule_stack;
-    // schedule_context.uc_stack.ss_size = DEFAULT_STACKSIZE;
-    // schedule_context.uc_stack.ss_flags = 0;
-    // makecontext(&schedule_context, (void (*)())schedule, 0);
-
-    main = TaskCreate(NULL, NULL);
-    SwapContext(&all[main]->context, &schedule_context);
-    return 0;
-}
 void task_ready(struct task *t) {
     if (ready_head == NULL) {
         ready_head = t;
@@ -163,8 +141,6 @@ void task_ready(struct task *t) {
     }
     t->status = READY;
 }
-
-static void gtstop(void) { printf("task return function"); }
 
 int TaskCreate(void (*f)(void *), void *arg) {
     struct task *ret;
@@ -184,7 +160,7 @@ int TaskCreate(void (*f)(void *), void *arg) {
     }
 
     // setup stack
-    *(uint64_t *)&stack[stacksize - 8] = (uint64_t)gtstop;
+    *(uint64_t *)&stack[stacksize - 8] = (uint64_t)ret;
     *(uint64_t *)&stack[stacksize - 16] = (uint64_t)task_helper;
     ret->context.rsp = (uint64_t)&stack[stacksize - 16];
 
@@ -214,10 +190,10 @@ int TaskCreate(void (*f)(void *), void *arg) {
     ret->tid = id;
     free_slot = free_slot->next;
     all[id] = ret;
-    // makecontext(&ret->context, (void (*)())task_helper, 1, id);
 
     return id;
 }
+
 int TaskYield(void) {
     int ret = (ready_head != NULL);
 
@@ -225,12 +201,6 @@ int TaskYield(void) {
     SwapContext(&running->context, &schedule_context);
     return ret;
 }
-
-// static void task_init(char *argv[]) {
-// 	uint tid;
-// 	tid = TaskCreate((void (*)(void*))TaskMain,argv,DEFAULT_STACKSIZE);
-// 	running = all[0];
-// }
 
 int main(int argc, char *argv[]) {
     init();
