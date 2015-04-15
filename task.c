@@ -6,19 +6,113 @@
 #include "task.h"
 
 static const char *status_string[] = {"running", "ready", "blocked", "exiting"};
-struct task **all;
-uint allsize;
-static char *schedule_stack;
+static const char *task_status(struct task *t);
 
 struct list {
     struct list *next;
 };
-static struct list *free_slot;
+
+static void slot_init_range(struct list *s, uint from, uint to) {
+    int i;
+    for (i = from; i < to; i++) {
+        s[i].next = &s[i + 1];
+    }
+    s[to - 1].next = NULL;
+}
+
+// get task by id && assign id to task
+struct taskmap {
+    struct task **all;
+    int allsize;
+    struct list *free_slot;
+};
+
+void taskmap_init(struct taskmap *tm) {
+    tm->all = calloc(64, sizeof(struct task *));
+    slot_init_range((struct list *)tm->all, 0, 64);
+    tm->free_slot = (struct list *)tm->all;
+    tm->allsize = 64;
+}
+
+void taskmap_exit(struct taskmap *tm) {
+    struct list *p;
+    int i;
+    int nblock = 0;
+
+    // firstly, set slots in free list to NULL
+    while (tm->free_slot != NULL) {
+        p = tm->free_slot;
+        tm->free_slot = tm->free_slot->next;
+        p->next = NULL;
+    }
+
+    // secondly, free the remain non-NULL slot in all array
+    for (i = 1; i < tm->allsize; i++) {
+        if (tm->all[i] != NULL) {
+            if (tm->all[i]->status == BLOCKED) {
+                nblock++;
+                free(tm->all[i]);
+                tm->all[i] = NULL;
+            } else {
+                if (!tm->all[i]->daemon)
+                    fprintf(stderr, "fatal error: some task have error "
+                                    "status,pid=%d,status=%s\n",
+                            i, task_status(tm->all[i]));
+            }
+        }
+    }
+    if (nblock != 0) {
+        fprintf(stderr,
+                "some task is blocked when program exit,maybe a dead lock!");
+    }
+}
+
+void taskmap_release(struct taskmap *tm, int tid) {
+    struct list *p = (struct list *)&tm->all[tid];
+    p->next = tm->free_slot;
+    tm->free_slot = p;
+}
+
+int taskmap_new(struct taskmap *tm, struct task *t) {
+    int id;
+
+    if (tm->free_slot == NULL) {
+        int i;
+        tm->all = realloc(tm->all, (tm->allsize + 16) * sizeof(struct task *));
+        if (tm->all == NULL) {
+            goto OOM;
+        }
+
+        slot_init_range((struct list *)tm->all, tm->allsize, tm->allsize + 16);
+        tm->free_slot = (struct list *)&tm->all[tm->allsize];
+        tm->allsize += 16;
+    }
+    id = (struct task **)tm->free_slot - tm->all;
+
+    tm->free_slot = tm->free_slot->next;
+    tm->all[id] = t;
+
+    return id;
+
+OOM:
+    fprintf(stderr, "out of memory");
+    exit(-1);
+}
+
+// TODO
+struct task *taskmap_grab(struct taskmap *tm, int tid) {
+    return NULL;
+}
 
 struct queue {
     struct task *head;
     struct task *tail;
 };
+
+static void _queue_init(struct queue *q) {
+    q->head = NULL;
+    q->tail = NULL;
+}
 
 static void _queue_push(struct queue *q, struct task *t) {
     if (q->head == NULL) {
@@ -48,8 +142,8 @@ static struct task *_queue_pop(struct queue *q) {
 }
 
 static struct queue ready;
-// static struct task *ready_head;
-// static struct task *ready_tail;
+static struct taskmap tm;
+
 struct task *running;
 struct Context schedule_context;
 
@@ -60,39 +154,13 @@ static const char *task_status(struct task *t) {
     return status_string[t->status];
 }
 
-// the reverse process of init. tackle with resource release, also delete dead
-// lock!
+// the reverse process of init.
+// tackle with resource release, also delete dead lock!
 void TaskExit(int val) {
-    struct list *p;
-    int i;
-    int nblock = 0;
-
-    while (free_slot != NULL) {
-        p = free_slot;
-        free_slot = free_slot->next;
-        p->next = NULL;
-    }
-    for (i = 1; i < allsize; i++) {
-        if (all[i] != NULL) {
-            if (all[i]->status == BLOCKED) {
-                nblock++;
-                free(all[i]);
-                all[i] = NULL;
-            } else {
-                if (!all[i]->daemon)
-                    fprintf(stderr, "fatal error: some task have error "
-                                    "status,pid=%d,status=%s\n",
-                            i, task_status(all[i]));
-            }
-        }
-    }
-    if (nblock != 0) {
-        fprintf(stderr,
-                "some task is blocked when program exit,maybe a dead lock!");
-    }
-    free(schedule_stack);
+    taskmap_exit(&tm);
     exit(val);
 }
+
 void TaskDaemon() { running->daemon = 1; }
 
 static void schedule() {
@@ -117,6 +185,7 @@ static void schedule() {
         // BLOCKED means task blocked by channel or I/O
         // EXITING means task finished and it's resources need to be collected
         if (running->status == EXITING) {
+            free(running->stk);
             free(running);
             running = NULL;
         }
@@ -126,13 +195,8 @@ static void schedule() {
 // NOTE: delay the release of memory here,because this function is run in the
 // task's stack!
 static void _TaskExit() {
-    struct list *p;
-
     running->status = EXITING;
-    p = (struct list *)&all[running->tid];
-    p->next = free_slot;
-    free_slot = p;
-
+    taskmap_release(&tm, running->tid);
     SwapContext(&running->context, &schedule_context);
 }
 
@@ -144,23 +208,11 @@ static void task_helper(void *ptr) {
 
     _TaskExit();
 }
-static void slot_init_range(struct list *s, uint from, uint to) {
-    int i;
-    for (i = from; i < to; i++) {
-        s[i].next = &s[i + 1];
-    }
-    s[to - 1].next = NULL;
-}
+
 static void init() {
     // srand(time(NULL));
-    all = calloc(64, sizeof(struct task *));
-
-    slot_init_range((struct list *)all, 0, 64);
-    free_slot = (struct list *)all;
-    allsize = 64;
-
-    ready.tail = NULL;
-    ready.head = NULL;
+    taskmap_init(&tm);
+    _queue_init(&ready);
     running = NULL;
 }
 
@@ -172,19 +224,19 @@ void task_ready(struct task *t) {
 int TaskCreate(void (*f)(void *), void *arg) {
     struct task *ret;
     int stacksize = DEFAULT_STACKSIZE;
-    uint id;
+    int tid;
 
     ret = malloc(sizeof(struct task));
     if (ret == NULL) {
-        fprintf(stderr, "out of memory");
-        exit(-1);
+        goto OOM;
     }
 
     char *stack = malloc(stacksize);
     if (stack == NULL) {
-        fprintf(stderr, "out of memory");
-        exit(-1);
+        goto OOM;
     }
+
+    tid = taskmap_new(&tm, ret);
 
     // setup stack
     *(uint64_t *)&stack[stacksize - 8] = (uint64_t)ret;
@@ -198,27 +250,14 @@ int TaskCreate(void (*f)(void *), void *arg) {
     ret->arg = arg;
     ret->daemon = 0;
     ret->next = NULL;
-
+    ret->tid = tid;
     task_ready(ret);
 
-    // put ret in all queue
-    if (free_slot == NULL) {
-        int i;
-        all = realloc(all, (allsize + 16) * sizeof(struct task *));
-        if (all == NULL) {
-            fprintf(stderr, "out of memory");
-            exit(-1);
-        }
-        slot_init_range((struct list *)all, allsize, allsize + 16);
-        free_slot = (struct list *)&all[allsize];
-        allsize += 16;
-    }
-    id = (struct task **)free_slot - all;
-    ret->tid = id;
-    free_slot = free_slot->next;
-    all[id] = ret;
+    return tid;
 
-    return id;
+OOM:
+    fprintf(stderr, "out of memory");
+    exit(-1);
 }
 
 int TaskYield(void) {
